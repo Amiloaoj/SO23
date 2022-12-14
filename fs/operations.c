@@ -64,16 +64,10 @@ static bool valid_pathname(char const *name) {
  * Returns the inumber of the file, -1 if unsuccessful.
  */
 static int tfs_lookup(char const *name, inode_t const *root_inode) {
-    // TODO: assert that root_inode is the root directory
-
     if(root_inode == NULL){
         return -1;
     }
 
-
-    if(root_inode != ROOT_DIR_INUM){
-        return -1;
-    }
 
     if (!valid_pathname(name)) {
         return -1;
@@ -149,27 +143,13 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
 }
 
 int tfs_sym_link(char const *target, char const *source_path) {
-    //(void)target;
-    //(void)source_file;
-    // ^ this is a trick to keep the compiler from complaining about unused
-    // variables. TODO: remove
-
-    //PANIC("TODO: tfs_sym_link");
-    //char buffer[1024];
     int fhandle_d;
     
-    FILE *fd = fopen(target, "w");
-    
-    if (fd == NULL) {
-        printf("Error opening file");
-        return -1;
-    }
 
     fhandle_d = tfs_open(target, TFS_O_CREAT);
 
     tfs_write(fhandle_d, source_path, strlen(source_path));
 
-    fclose(fd);
     tfs_close(fhandle_d);
     
     return 0;
@@ -278,16 +258,9 @@ int tfs_unlink(char const *target) {
 }
 
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
-    //(void)source_path;
-    //(void)dest_path;
-    // ^ this is a trick to keep the compiler from complaining about unused
-    // variables. TODO: remove
-
-    //PANIC("TODO: tfs_copy_from_external_fs");
-
     char buffer[1024];
     int fhandle_d;
-    int inumber_d;
+    
 
 
     FILE *fd = fopen(source_path, "r");
@@ -296,33 +269,21 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
         return -1;
     }
     fhandle_d = tfs_open(dest_path, TFS_O_CREAT);
-
-    inumber_d = tfs_lookup(dest_path,ROOT_DIR_INUM);
-
-    memset(buffer, 0, sizeof(buffer));
-    size_t bytes_r = fread(buffer,sizeof(buffer),strlen(buffer)+1, fd);
-    while (bytes_r > 0) {
-        if(inode_get(inumber_d)->i_size / BLOCK_SIZE > 0) {
-            for(size_t i = 1; i < inode_get(inumber_d)->i_size / BLOCK_SIZE; i++){
-                if(tfs_read(fhandle_d,buffer,BLOCK_SIZE) != 1){
-                    memset(buffer, 0, BLOCK_SIZE);
-                    bytes_r = fread(buffer,sizeof(buffer),strlen(buffer)+1, fd);
-                }else{
-                    return -1;
-                }
-            }
-        }
-        else{
-            return -1;
-        }
-    }
-
-    bytes_r = fread(buffer,sizeof(buffer),strlen(buffer)+1, fd);
-
-    if(bytes_r == -1){
+    if(fhandle_d == -1){
+        fclose(fd);
         return -1;
     }
 
+    //inumber_d = tfs_lookup(dest_path,ROOT_DIR_INUM);
+
+    memset(buffer, 0, sizeof(buffer));
+    size_t bytes_r = fread(buffer,sizeof(char),sizeof(buffer)-1, fd);
+    
+    while (bytes_r > 0) { 
+                ssize_t written=tfs_write(fhandle_d,buffer,bytes_r);
+                memset(buffer, 0, BLOCK_SIZE);
+                bytes_r = fread(buffer,sizeof(char),sizeof(buffer)-1, fd);
+                }
     fclose(fd);
     tfs_close(fhandle_d);
     return 0;
