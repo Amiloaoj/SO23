@@ -8,6 +8,8 @@
 
 #include "betterassert.h"
 
+#define BLOCK_SIZE 1024
+
 tfs_params tfs_default_params() {
     tfs_params params = {
         .max_inode_count = 64,
@@ -63,6 +65,16 @@ static bool valid_pathname(char const *name) {
  */
 static int tfs_lookup(char const *name, inode_t const *root_inode) {
     // TODO: assert that root_inode is the root directory
+
+    if(root_inode == NULL){
+        return -1;
+    }
+
+
+    if(root_inode != ROOT_DIR_INUM){
+        return -1;
+    }
+
     if (!valid_pathname(name)) {
         return -1;
     }
@@ -275,7 +287,9 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
 
     char buffer[1024];
     int fhandle_d;
-    
+    int inumber_d;
+
+
     FILE *fd = fopen(source_path, "r");
 
     if (fd == NULL) {
@@ -283,12 +297,30 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
     }
     fhandle_d = tfs_open(dest_path, TFS_O_CREAT);
 
+    inumber_d = tfs_lookup(dest_path,ROOT_DIR_INUM);
+
     memset(buffer, 0, sizeof(buffer));
     size_t bytes_r = fread(buffer,sizeof(buffer),strlen(buffer)+1, fd);
     while (bytes_r > 0) {
-        tfs_write(fhandle_d, buffer, bytes_r);
-        memset(buffer, 0, sizeof(buffer));
-        bytes_r = fread(buffer,sizeof(buffer),strlen(buffer)+1, fd);
+        if(inode_get(inumber_d)->i_size / BLOCK_SIZE > 0) {
+            for(size_t i = 1; i < inode_get(inumber_d)->i_size / BLOCK_SIZE; i++){
+                if(tfs_read(fhandle_d,buffer,BLOCK_SIZE) != 1){
+                    memset(buffer, 0, BLOCK_SIZE);
+                    bytes_r = fread(buffer,sizeof(buffer),strlen(buffer)+1, fd);
+                }else{
+                    return -1;
+                }
+            }
+        }
+        else{
+            return -1;
+        }
+    }
+
+    bytes_r = fread(buffer,sizeof(buffer),strlen(buffer)+1, fd);
+
+    if(bytes_r == -1){
+        return -1;
     }
 
     fclose(fd);
